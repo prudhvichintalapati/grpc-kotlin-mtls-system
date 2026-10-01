@@ -19,7 +19,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
 import java.io.Closeable
 import java.io.File
@@ -173,7 +172,8 @@ class SignalClient(
             } catch (ex: Exception) {
                 if (!coroutineContext.isActive) break
 
-                val backoffMs = (1000L * (1 shl (attempt.coerceAtMost(5) - 1))).coerceAtMost(10000L)
+                val safeAttempt = attempt.coerceIn(1, 10)
+                val backoffMs = (1000L * (1 shl (safeAttempt - 1))).coerceAtMost(10000L)
                 val reason = if (ex is StatusRuntimeException) "[${ex.status.code}] ${ex.status.description}" else ex.message
                 logger.warn("⚠️ Stream connection lost (${reason}). Reconnecting in ${backoffMs}ms...")
                 
