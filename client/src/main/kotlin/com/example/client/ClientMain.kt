@@ -18,12 +18,12 @@ fun main(args: Array<String>) = runBlocking {
     val port = System.getenv("SERVER_PORT")?.toIntOrNull() ?: 8443
     val caCert = File(System.getenv("CA_CERT") ?: File(rootCertsDir, "ca.crt").absolutePath)
 
-    val targetClient = args.firstOrNull() ?: "demo"
+    val mode = args.firstOrNull() ?: "demo"
 
-    if (targetClient == "demo") {
-        runAutomatedDemoSuite(host, port, rootCertsDir, caCert)
-    } else {
-        runSingleClientCall(targetClient, host, port, rootCertsDir, caCert)
+    when (mode) {
+        "demo" -> runAutomatedDemoSuite(host, port, rootCertsDir, caCert)
+        "stream" -> runStreamingAutoReconnectDemo(host, port, rootCertsDir, caCert)
+        else -> runSingleClientCall(mode, host, port, rootCertsDir, caCert)
     }
 }
 
@@ -38,7 +38,7 @@ private suspend fun runAutomatedDemoSuite(
     logger.info("Server endpoint: {}:{}", host, port)
     logger.info("=========================================================")
 
-    // --- TEST CASE 1: alpha-client ---
+    // --- TEST CASE 1: alpha-client (Unary + Bi-directional Stream) ---
     logger.info("\n--- [TEST 1] Testing 'alpha-client' (Full Privileges in policy.json) ---")
     val alphaCert = File(certsDir, "alpha-client.crt")
     val alphaKey = File(certsDir, "alpha-client.pem")
@@ -48,18 +48,24 @@ private suspend fun runAutomatedDemoSuite(
         val signalRes = client.sendSignal("SIG-101", "CRITICAL", "Alpha payload data")
         val telemetryRes = client.submitTelemetry("{\"cpu\": 42.5}")
 
+        logger.info("\n--- [TEST 1b] Testing 'alpha-client' Bi-directional Event Stream ---")
+        client.startAutoReconnectingEventStream(maxEvents = 3, delayBetweenEventsMs = 500L)
+
         val alphaPassed = healthRes.isSuccess && signalRes.isSuccess && telemetryRes.isSuccess
         logger.info("Result for 'alpha-client': {}", if (alphaPassed) "PASSED (All calls authorized)" else "FAILED")
     }
 
-    // --- TEST CASE 2: beta-client ---
-    logger.info("\n--- [TEST 2] Testing 'beta-client' (Restricted: GetHealth allowed, SendSignal DENIED) ---")
+    // --- TEST CASE 2: beta-client (Stream allowed, SendSignal DENIED) ---
+    logger.info("\n--- [TEST 2] Testing 'beta-client' (Restricted: EventChannel allowed, SendSignal DENIED) ---")
     val betaCert = File(certsDir, "beta-client.crt")
     val betaKey = File(certsDir, "beta-client.pem")
 
     SignalClient(host, port, betaCert, betaKey, caCert).use { client ->
         val healthRes = client.getHealth("beta-client")
         val signalRes = client.sendSignal("SIG-202", "WARN", "Beta payload data")
+
+        logger.info("\n--- [TEST 2b] Testing 'beta-client' Bi-directional Event Stream ---")
+        client.startAutoReconnectingEventStream(maxEvents = 2, delayBetweenEventsMs = 500L)
 
         val betaPassed = healthRes.isSuccess && signalRes.isFailure
         logger.info(
@@ -70,7 +76,7 @@ private suspend fun runAutomatedDemoSuite(
         )
     }
 
-    // --- TEST CASE 3: unauthorized-client ---
+    // --- TEST CASE 3: unauthorized-client (No permissions in policy.json) ---
     logger.info("\n--- [TEST 3] Testing 'unauthorized-client' (No permissions in policy.json) ---")
     val unauthCert = File(certsDir, "unauthorized-client.crt")
     val unauthKey = File(certsDir, "unauthorized-client.pem")
@@ -93,6 +99,25 @@ private suspend fun runAutomatedDemoSuite(
     logger.info("=========================================================")
 }
 
+private suspend fun runStreamingAutoReconnectDemo(
+    host: String,
+    port: Int,
+    certsDir: File,
+    caCert: File
+) {
+    logger.info("=========================================================")
+    logger.info("STARTING LIVE gRPC STREAM AUTO-RECONNECT DEMO")
+    logger.info("Keep server running or restart it mid-stream to watch reconnect!")
+    logger.info("=========================================================")
+
+    val certFile = File(certsDir, "alpha-client.crt")
+    val keyFile = File(certsDir, "alpha-client.pem")
+
+    SignalClient(host, port, certFile, keyFile, caCert).use { client ->
+        client.startAutoReconnectingEventStream(maxEvents = 30, delayBetweenEventsMs = 1500L)
+    }
+}
+
 private suspend fun runSingleClientCall(
     clientName: String,
     host: String,
@@ -106,6 +131,6 @@ private suspend fun runSingleClientCall(
     logger.info("Executing client call using identity: {}", clientName)
     SignalClient(host, port, certFile, keyFile, caCert).use { client ->
         client.getHealth(clientName)
-        client.sendSignal("SIG-CUSTOM", "INFO", "Custom signal call from $clientName")
+        client.startAutoReconnectingEventStream(maxEvents = 5, delayBetweenEventsMs = 1000L)
     }
 }

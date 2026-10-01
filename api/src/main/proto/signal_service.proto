@@ -41,9 +41,29 @@ message TelemetryResponse {
   int32 items_accepted = 1;
 }
 
+// Bi-directional Event-Driven Streaming models
+message EventMessage {
+  string event_id = 1;
+  string event_type = 2;
+  string payload = 3;
+  int64 timestamp = 4;
+  int64 sequence_number = 5;
+}
+
+message EventResponse {
+  string event_id = 1;
+  string status = 2; // e.g. "ACK", "PROCESSED", "REJECTED"
+  string message = 3;
+  int64 processed_at = 4;
+  int64 sequence_number = 5;
+}
+
 // SignalService definition
 service SignalService {
   rpc SendSignal (SignalRequest) returns (SignalResponse);
   rpc GetHealth (HealthCheckRequest) returns (HealthCheckResponse);
   rpc SubmitTelemetry (TelemetryRequest) returns (TelemetryResponse);
+
+  // Bi-directional event-driven streaming RPC (Client to Server & Server to Client)
+  rpc EventChannel (stream EventMessage) returns (stream EventResponse);
 }

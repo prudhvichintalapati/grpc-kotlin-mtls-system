@@ -1,6 +1,8 @@
 package com.example.server.service
 
 import com.example.server.auth.AuthContext
+import com.example.signal.v1.EventMessage
+import com.example.signal.v1.EventResponse
 import com.example.signal.v1.HealthCheckRequest
 import com.example.signal.v1.HealthCheckResponse
 import com.example.signal.v1.SignalRequest
@@ -8,6 +10,10 @@ import com.example.signal.v1.SignalResponse
 import com.example.signal.v1.SignalServiceGrpcKt
 import com.example.signal.v1.TelemetryRequest
 import com.example.signal.v1.TelemetryResponse
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.onStart
 import org.slf4j.LoggerFactory
 import java.time.Instant
 
@@ -54,5 +60,41 @@ class SignalServiceImpl : SignalServiceGrpcKt.SignalServiceCoroutineImplBase() {
         return TelemetryResponse.newBuilder()
             .setItemsAccepted(1)
             .build()
+    }
+
+    /**
+     * Bi-directional Event-Driven Streaming RPC.
+     * Receives a continuous stream of EventMessage objects from client and emits
+     * asynchronous EventResponse ACKs back to the client.
+     */
+    override fun eventChannel(requests: Flow<EventMessage>): Flow<EventResponse> {
+        val clientCn = AuthContext.CLIENT_CN_KEY.get() ?: "UNKNOWN"
+        logger.info("Client '{}' opened EventChannel gRPC Stream", clientCn)
+
+        return requests
+            .onStart {
+                logger.info("EventChannel stream started for client '$clientCn'")
+            }
+            .map { event ->
+                logger.info(
+                    "Received EventMessage from client '{}': seq={}, id='{}', type='{}', payload='{}'",
+                    clientCn, event.sequenceNumber, event.eventId, event.eventType, event.payload
+                )
+
+                EventResponse.newBuilder()
+                    .setEventId(event.eventId)
+                    .setStatus("ACK")
+                    .setMessage("Event '${event.eventId}' (Seq #${event.sequenceNumber}) acknowledged by server for client '$clientCn'")
+                    .setSequenceNumber(event.sequenceNumber)
+                    .setProcessedAt(Instant.now().toEpochMilli())
+                    .build()
+            }
+            .onCompletion { cause ->
+                if (cause != null) {
+                    logger.warn("EventChannel stream closed with error/disconnect for client '$clientCn': ${cause.message}")
+                } else {
+                    logger.info("EventChannel stream closed cleanly for client '$clientCn'")
+                }
+            }
     }
 }

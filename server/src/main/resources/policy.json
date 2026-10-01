@@ -4,10 +4,12 @@
     "alpha-client": [
       "com.example.signal.v1.SignalService/SendSignal",
       "com.example.signal.v1.SignalService/GetHealth",
-      "com.example.signal.v1.SignalService/SubmitTelemetry"
+      "com.example.signal.v1.SignalService/SubmitTelemetry",
+      "com.example.signal.v1.SignalService/EventChannel"
     ],
     "beta-client": [
-      "com.example.signal.v1.SignalService/GetHealth"
+      "com.example.signal.v1.SignalService/GetHealth",
+      "com.example.signal.v1.SignalService/EventChannel"
     ]
   }
 }
