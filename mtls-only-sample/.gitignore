@@ -1,0 +1,27 @@
+# Gradle build outputs
+.gradle/
+build/
+*/build/
+bin/
+*/bin/
+out/
+*/out/
+
+# IDE files
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.DS_Store
+
+# Log files
+*.log
+server.log
+
+# Generated certificates & private keys (generated on demand via certs/generate-certs.sh)
+certs/*.crt
+certs/*.key
+certs/*.pem
+certs/*.srl
+!certs/generate-certs.sh
