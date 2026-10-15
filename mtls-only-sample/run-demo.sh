@@ -7,6 +7,13 @@ export PATH="$JAVA_HOME/bin:$PATH"
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 cd "$DIR"
 
+# Choose gradlew if present, else gradle
+if [ -f "./gradlew" ]; then
+    GRADLE_CMD="./gradlew"
+else
+    GRADLE_CMD="gradle"
+fi
+
 echo "=== Ensuring mTLS Certificates exist ==="
 if [ ! -f "certs/server.crt" ]; then
     chmod +x certs/generate-certs.sh
@@ -14,11 +21,11 @@ if [ ! -f "certs/server.crt" ]; then
 fi
 
 echo "=== Starting gRPC Server (mTLS-Only, No Policy Enforcement) ==="
-gradle :server:run > server.log 2>&1 &
+$GRADLE_CMD :server:run > server.log 2>&1 &
 SERVER_PID=$!
 
 echo "Server started with PID: $SERVER_PID. Waiting for gRPC server on port 8443..."
-sleep 5
+sleep 6
 
 cleanup() {
     echo "=== Cleaning up Server (PID: $SERVER_PID) ==="
@@ -28,7 +35,7 @@ cleanup() {
 trap cleanup EXIT
 
 echo "=== Running gRPC Client Pure mTLS Verification Suite ==="
-gradle :client:run
+$GRADLE_CMD :client:run
 
 echo ""
 echo "=== Server Log Highlights ==="

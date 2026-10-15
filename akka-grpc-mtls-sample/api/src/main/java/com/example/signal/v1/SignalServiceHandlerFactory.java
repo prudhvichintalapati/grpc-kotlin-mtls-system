@@ -18,9 +18,7 @@ import java.util.concurrent.CompletionStage;
 public class SignalServiceHandlerFactory {
 
     private static final org.slf4j.Logger logger = LoggerFactory.getLogger(SignalServiceHandlerFactory.class);
-    private static final MediaType.Binary GRPC_MEDIA_TYPE =
-            MediaType.customBinary("application", "grpc", MediaType.compSupported());
-    private static final ContentType GRPC_CONTENT_TYPE = ContentTypes.create(GRPC_MEDIA_TYPE);
+    private static final ContentType.Binary GRPC_CONTENT_TYPE = ContentTypes.APPLICATION_GRPC_PROTO;
 
     public static Function<HttpRequest, CompletionStage<HttpResponse>> create(
             SignalService service,
@@ -119,11 +117,12 @@ public class SignalServiceHandlerFactory {
     ) {
         // Stream of incoming bytes decoded into gRPC frames of EventMessage
         Source<EventMessage, NotUsed> incomingEvents = request.entity().getDataBytes()
-                .via(Framing.lengthField(4, 1, 4, Integer.MAX_VALUE, ByteOrder.BIG_ENDIAN))
+                .via(Framing.lengthField(4, 1, 4 * 1024 * 1024, ByteOrder.BIG_ENDIAN))
                 .map(frame -> {
                     byte[] payload = extractGrpcPayload(frame.toArray());
                     return EventMessage.parseFrom(payload);
-                });
+                })
+                .mapMaterializedValue(ignore -> NotUsed.getInstance());
 
         // Delegate to service stream
         Source<EventResponse, NotUsed> responseStream = service.eventChannel(incomingEvents);
